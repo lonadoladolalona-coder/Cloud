@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A simple "dashboard card" placeholder mark — swap for the real AJM Family logo
+         via Android Studio's Image Asset tool (the web pages already have one at img/logo-light.png). -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,30 h40 a8,8 0 0 1 8,8 v32 a8,8 0 0 1 -8,8 h-40 a8,8 0 0 1 -8,-8 v-32 a8,8 0 0 1 8,-8 z" />
+    <path
+        android:fillColor="#E8A33D"
+        android:pathData="M34,30 h40 a8,8 0 0 1 8,8 v10 h-56 v-10 a8,8 0 0 1 8,-8 z" />
+    <path
+        android:fillColor="#16305A"
+        android:pathData="M44,60 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+    <path
+        android:fillColor="#16305A"
+        android:pathData="M64,60 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+</vector>

@@ -1,0 +1,6 @@
+<resources>
+    <!-- Placeholder platform theme shown only until Compose's own MaterialTheme takes over. -->
+    <style name="Theme.AjmAdmin" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>
