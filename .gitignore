@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+*.log
+.claude/
+e2e/out/
+coverage/
+.DS_Store
