@@ -10,13 +10,12 @@ The point is that the output **format cannot drift**. Claude only fills a struct
 
 ## Quick start
 
-Requires Node 20 or newer.
+Requires [Node.js](https://nodejs.org) 20 or newer.
 
-```bash
-npm install
-npm run build
-npm start            # http://127.0.0.1:8787
-```
+1. Download the repository ZIP and unzip it.
+2. Double-click **`start.bat`** (Windows) or run **`./start.sh`** (macOS / Linux). The first run installs dependencies and builds the UI, then opens http://127.0.0.1:8787.
+   Or by hand: `npm install && npm run build && npm start`.
+3. Open **Settings → Video generation → MiniMax H3**, point it at your model folder and press **Scan folder** (next section).
 
 Development with hot reload: `npm run dev` (Vite on :5173, API on :8787).
 
@@ -46,9 +45,43 @@ You can write prompts without a key by using **Blank template** or **Import prom
 
 The guides live in `src/server/guides/` and are sent verbatim to Claude as the system prompt (cached).
 
-## Connecting your local Minimax H3
+## Using your downloaded MiniMax H3 folder
 
-I don't know how your H3 is launched, so generation goes through a small generic contract. **Settings → Video generation → Local model** takes a program, arguments, a working directory, a timeout and extra environment variables. For each job the app starts the program directly (no shell) in a fresh job folder under `data/jobs/<id>/`, with these environment variables:
+H3 is released by MiniMax as two checkpoints in one Hugging Face repository (`MiniMaxAI/MiniMax-H3`), and the official way to run them locally is an **SGLang** server. Studio drives that server for you:
+
+```
+MiniMax-H3/
+├── model_index.json
+├── FL2VA/   text-to-video, first-frame, last-frame, first+last-frame   (T2VA / I2VA / L2VA / FL2VA prompts)
+│   └── model_index.json  processor/  tokenizer/  text_encoder/  transformer/  visual_vae/  audio_vae/
+└── Ref2VA/  image / video / audio references                           (full-reference prompts)
+    └── …same layout…
+```
+
+**Settings → Video generation → MiniMax H3 → Model folder:** paste the path (or press **Browse…**) and press **Scan folder**. You can give the exact folder, the `FL2VA` / `Ref2VA` folder, or any folder above it. The scan:
+
+- finds the model root, and checks that every component exists and has real weights. It tells you about missing components, missing weight shards, Git-LFS pointer stubs (a clone made without LFS), and interrupted `hf download` runs;
+- finds **SGLang** in a virtual environment next to the models (`.venv`, `venv`, `env` in the folder or up to two levels above), in the active Python environment, or on `PATH`;
+- reads your GPUs from `nvidia-smi` and fills in the settings it found.
+
+Then just press **Generate**. For each job Studio:
+
+1. picks the checkpoint the prompt needs (T2VA / I2VA / L2VA / FL2VA → `FL2VA`, any reuse of subjects, source video or audio → `Ref2VA`);
+2. starts `sglang serve --model-path <folder> --model-variant fl2va|ref2va --num-gpus N --host 127.0.0.1 --port P` if it isn't running (first load takes minutes; Ref2VA uses port P+1). A server holds one checkpoint, so switching checkpoints restarts it;
+3. sends MiniMax's documented request, `POST /v1/videos` with `{ task, prompt, conditions, target: { short_edge: 768, aspect_ratio, duration_seconds }, seed }`, passing your reference files as `file://` URIs, then polls `GET /v1/videos/{id}` and downloads `/content` as `output.mp4`;
+4. stops the server after 20 idle minutes (configurable) to free the GPU, and on quit.
+
+What the model itself allows is enforced before queueing: 4–15 s, Ref2VA ≤ 9 images, ≤ 3 videos, ≤ 3 audio clips, ≤ 12 files in total, audio only together with an image or video. Output is 768p on the short edge (2K needs MiniMax's cloud H3-Regenerate-2K, which is not part of the open weights).
+
+**Not what you have?** The scan says so instead of failing later:
+
+- *SGLang not found* — install SGLang with MiniMax-H3 support (see the [SGLang cookbook](https://docs.sglang.io/cookbook/diffusion/MiniMax/MiniMax-H3)) into a `.venv` next to the models, or set its path under *Advanced*. Studio does not install the inference engine itself.
+- *Windows* — SGLang runs on Linux. Run it in WSL or Docker yourself and choose **I run the server myself**: give the two URLs and set the file transport to **Embedded** so the server doesn't need to see your Windows paths.
+- *ComfyUI install, or a diffusers / vLLM-Omni setup* — detected and reported, but Studio does not drive those yet.
+
+### Any other program (custom command)
+
+**Backend → Custom command** runs your own program once per job (no shell), in a fresh folder `data/jobs/<id>/`, with these environment variables:
 
 | Variable | Meaning |
 |---|---|
@@ -57,17 +90,9 @@ I don't know how your H3 is launched, so generation goes through a small generic
 | `H3_PROMPT_FILE` | `prompt.txt`, the final structured prompt |
 | `H3_OUTPUT` | where to write the video, `<job dir>/output.mp4` |
 
-Rules:
+Reference files are copied to `inputs/Picture_1.png`, `inputs/Video_1.mp4`, … matching the prompt labels. Print `PROGRESS 40 sampling` (or `{"progress":0.4,"message":"sampling"}`) to drive the progress bar. Exit code 0 plus an `output.(mp4|webm|mov|m4v)` = success; cancel kills the whole process group. A stand-in is in `tests/fixtures/fake-h3.mjs`.
 
-- Reference files are copied into the job folder as `inputs/Picture_1.png`, `inputs/Video_1.mp4`, and so on, matching the labels in the prompt.
-- Print `PROGRESS 40 sampling` or a JSON line `{"progress":0.4,"message":"sampling"}` to drive the progress bar (optional).
-- **Success = exit code 0 and an `output.(mp4|webm|mov|m4v)` file in the job folder.** Anything else fails the job, and the last stderr lines are shown in its log.
-- **Cancel** kills the whole process group.
-- Jobs run one at a time.
-
-A runnable stand-in is in `tests/fixtures/fake-h3.mjs`. A wrapper for a real model is usually about ten lines: read `H3_JOB_JSON`, call your inference script or local HTTP server, write the file to `H3_OUTPUT`. If you tell me how your H3 is invoked (CLI script or HTTP server), I can write that adapter.
-
-The default backend is **Mock**. It simulates progress and renders a poster, so the whole UI can be tried with no model.
+The **Mock** backend simulates progress and renders a poster, so the whole UI can be tried with no model.
 
 ## Security
 
@@ -88,11 +113,12 @@ Privacy notes:
 
 | Part | Verified how |
 |---|---|
-| Prompt engine (compile, lint, parse, relabel) | 27 unit tests, including round-trips of the guide's own examples |
-| Server (security, assets, queue, command backend, Range) | 20 tests with the fake model |
-| Web UI | Playwright run in real Chromium (`npm run e2e`): all flows, no console errors |
-| **Live Claude call** | **Not yet tested against the real API.** The request shape (system blocks, `json_schema` output, effort, fallback beta, image blocks) was checked against a local stub only |
-| **Real Minimax H3** | **Not connected**; it depends on how you run it (see above) |
+| Prompt engine (compile, lint, parse, relabel) | unit tests, including round-trips of the guide's own examples |
+| Server (security, assets, queue, command backend, Range) | tests with a fake model program |
+| H3 folder scan, request builder, server manager, backend | tests with fake model folders (complete / missing parts / LFS stubs / lower-case names / ComfyUI) and a **fake `sglang` executable** that implements `/health` and `/v1/videos`; 73 tests in total |
+| Web UI | Playwright run in real Chromium (`npm run e2e`): every prompt mode, folder scan and picker, starting and stopping the server, generating through it, cancel, import, no console errors |
+| **Live Claude call** | **Not yet tested against the real API.** The request shape was checked against a local stub only |
+| **Real MiniMax H3 / real SGLang** | **Not run** (no GPU or weights here). Flags and request fields follow [MiniMax's README and reproducible scripts](https://github.com/MiniMax-AI/MiniMax-H3). Three details are inferred, not documented, and are the first places to look if something fails: the last-frame condition uses `frame_index: -1`, `/health` is used for readiness (a 404 is tolerated), and the progress field of the status response is read if present |
 
 Scripts: `npm test`, `npm run typecheck`, `npm run e2e` (needs `npm run build` first and a Chromium that Playwright can find).
 

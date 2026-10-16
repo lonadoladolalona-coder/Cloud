@@ -13,8 +13,13 @@ import type { AssetKind } from '../shared/types';
 import { serveFile, mimeForPath } from './files';
 import { JobQueue } from './gen/queue';
 import { createCommandBackend } from './gen/command';
+import { createH3Backend, preflightH3 } from './gen/h3';
 import { createMockBackend } from './gen/mock';
 import type { Backend } from './gen/types';
+import { listDirs } from './h3/browse';
+import { H3RequestError } from './h3/request';
+import { scanModelFolder } from './h3/scan';
+import { H3ServerManager } from './h3/server';
 import { EnhanceError, enhance, type Complete } from './llm/enhance';
 import { localOnly } from './security';
 import { CreateJobSchema, EnhanceRequestSchema } from './schemas';
@@ -26,8 +31,10 @@ export interface AppOptions {
   port: number;
   /** Extra browser origins allowed to call the API (the Vite dev server). */
   extraOrigins?: string[];
-  backends?: Partial<Record<'mock' | 'command', Backend>>;
+  backends?: Partial<Record<'mock' | 'command' | 'h3', Backend>>;
   complete?: Complete;
+  /** Milliseconds between status polls of the H3 model server (tests lower it). */
+  h3PollMs?: number;
   /** Built web UI to serve. Skipped when the folder doesn't exist. */
   webRoot?: string;
 }
@@ -43,10 +50,15 @@ const zodMessage = (err: ZodError) => err.issues.map((i) => `${i.path.join('.') 
 export function createApp(opts: AppOptions) {
   const store = new Store(opts.dataDir);
   let settings = store.loadSettings();
+  const h3Server = new H3ServerManager(() => settings.generation.h3, opts.h3PollMs ? Math.min(1500, opts.h3PollMs * 3) : undefined);
   const queue = new JobQueue(
     store,
     () => settings,
-    { mock: opts.backends?.mock ?? createMockBackend(), command: opts.backends?.command ?? createCommandBackend() },
+    {
+      mock: opts.backends?.mock ?? createMockBackend(),
+      command: opts.backends?.command ?? createCommandBackend(),
+      h3: opts.backends?.h3 ?? createH3Backend(h3Server, { pollMs: opts.h3PollMs }),
+    },
   );
 
   const app = new Hono();
@@ -78,6 +90,34 @@ export function createApp(opts: AppOptions) {
     }
     store.saveSettings(settings);
     return c.json(toView(settings));
+  });
+
+  // ---- MiniMax H3 model folder + server -----------------------------------------------------
+  app.post('/api/h3/scan', async (c) => {
+    const body = (await readJson(c)) as { path?: unknown } | undefined;
+    if (!body || typeof body.path !== 'string') return c.json({ error: 'Send { "path": "<folder>" }.' }, 400);
+    return c.json(await scanModelFolder(body.path.slice(0, 1000), { sglangHint: settings.generation.h3.sglangPath || undefined }));
+  });
+  app.get('/api/h3/status', (c) => c.json(h3Server.status()));
+  app.post('/api/h3/start', async (c) => {
+    const body = (await readJson(c)) as { variant?: unknown } | undefined;
+    if (body?.variant !== 'fl2va' && body?.variant !== 'ref2va') return c.json({ error: 'variant must be "fl2va" or "ref2va".' }, 400);
+    if (queue.busy()) return c.json({ error: 'A generation is running. Wait for it to finish first.' }, 409);
+    // Returns at once; the UI polls /api/h3/status while the model loads.
+    void h3Server.ensure(body.variant).then(() => h3Server.release(), () => undefined);
+    return c.json(h3Server.status(), 202);
+  });
+  app.post('/api/h3/stop', async (c) => {
+    if (queue.busy()) return c.json({ error: 'A generation is running. Cancel it first.' }, 409);
+    await h3Server.stop();
+    return c.json(h3Server.status());
+  });
+  app.get('/api/fs/dirs', async (c) => {
+    try {
+      return c.json(await listDirs(c.req.query('path') ?? ''));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'Cannot list that folder.' }, 400);
+    }
   });
 
   // ---- assets -------------------------------------------------------------------------------
@@ -148,6 +188,17 @@ export function createApp(opts: AppOptions) {
       return c.json({ error: 'No program is configured for the command backend. Set one under Settings.' }, 400);
     }
 
+    if (backend === 'h3') {
+      const h3 = settings.generation.h3;
+      if (h3.serverMode === 'managed' && !h3.modelDir) return c.json({ error: 'No H3 model folder is set. Open Settings → MiniMax H3 and pick it.' }, 400);
+      try {
+        preflightH3({ mode, prompt: compile(req.doc, labeled, mode), params: req.params, items: labeled.map((a) => ({ label: a.label, kind: a.kind, role: a.role, uri: 'file:///preflight' })) });
+      } catch (err) {
+        if (err instanceof H3RequestError) return c.json({ error: err.message }, 400);
+        throw err;
+      }
+    }
+
     const assets = [];
     for (const a of labeled) {
       const meta = store.getAsset(a.id);
@@ -206,7 +257,7 @@ export function createApp(opts: AppOptions) {
     app.get('*', serveStatic({ path: path.join(root, 'index.html') }));
   }
 
-  return { app, store, queue, getSettings: () => settings };
+  return { app, store, queue, h3Server, getSettings: () => settings };
 }
 
 export { assetUrl };

@@ -17,7 +17,7 @@ export interface Draft {
 export const initialDraft = (): Draft => ({
   idea: '',
   presetId: null,
-  params: { durationSec: 8, aspectRatio: '16:9', resolution: '720p', seed: null, generateAudio: true },
+  params: { durationSec: 8, aspectRatio: '16:9', resolution: '768p', seed: null, generateAudio: true },
   dialogue: 'none',
   dialogueLanguage: 'English',
   music: false,

@@ -6,13 +6,14 @@
  */
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { chromium, type Page } from 'playwright-core';
+import { makeModel } from '../tests/fixtures/h3-model';
 
 const PORT = 8799;
 const OUT = path.resolve('e2e/out');
@@ -213,7 +214,7 @@ async function main() {
   await page.getByLabel('Extra environment').fill('CUSTOM_VAR=from-settings');
   await shot('07-settings');
   await page.getByRole('button', { name: 'Save settings' }).click();
-  await page.getByText('Settings saved.').waitFor();
+  await page.getByText('Settings saved.').last().waitFor();
   assert.equal(await page.locator('input[type=password]').inputValue(), '');
   await page.getByRole('button', { name: 'Create' }).click();
   await page.getByLabel('Run on').selectOption('command');
@@ -233,7 +234,7 @@ async function main() {
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByLabel('Extra environment').fill('FAKE_HANG=1');
   await page.getByRole('button', { name: 'Save settings' }).click();
-  await page.getByText('Settings saved.').waitFor();
+  await page.getByText('Settings saved.').last().waitFor();
   await page.getByRole('button', { name: 'Create' }).click();
   await page.getByLabel('Run on').selectOption('command');
   await page.getByTestId('generate').click();
@@ -241,6 +242,67 @@ async function main() {
   await page.locator('[data-testid=job-card][data-status=running]').getByRole('button', { name: 'Cancel' }).click();
   await page.waitForFunction(() => document.querySelector('[data-testid=job-card][data-status=cancelled]'), undefined, { timeout: 10000 });
   step('running job can be cancelled from the UI');
+
+  // --- MiniMax H3: give it a folder, everything is detected, generate through a (fake) SGLang ---
+  const h3Parent = mkdtempSync(path.join(tmpdir(), 'h3-e2e-models-'));
+  const h3Root = makeModel(path.join(h3Parent, 'MiniMax-H3'));
+  mkdirSync(path.join(h3Root, '.venv', 'bin'), { recursive: true });
+  symlinkSync(path.resolve('tests/fixtures/fake-sglang.mjs'), path.join(h3Root, '.venv', 'bin', 'sglang'));
+  const h3Pid = path.join(h3Parent, 'sglang.pid');
+  const h3Log = path.join(h3Parent, 'sglang.log');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByLabel('Backend').selectOption('h3');
+  await page.getByRole('textbox', { name: 'Model folder' }).fill(h3Parent); // the parent, not the exact folder
+  await page.getByRole('button', { name: 'Scan folder' }).click();
+  await page.getByText('Everything needed was found').waitFor();
+  assert.equal(await page.getByRole('textbox', { name: 'Model folder' }).inputValue(), h3Root, 'scan resolves and applies the real model root');
+  assert.match(await page.getByTestId('scan-fl2va').innerText(), /ready/);
+  assert.match(await page.getByTestId('scan-ref2va').innerText(), /ready/);
+  assert.match(await page.getByTestId('scan-result').innerText(), /SGLang found at .*\.venv\/bin\/sglang/);
+  await page.getByText('Advanced', { exact: true }).click();
+  await page.getByLabel('Base port').fill('31880');
+  await page.getByLabel('Server environment').fill(`FAKE_SGLANG_LOG=${h3Log}\nFAKE_SGLANG_PID_FILE=${h3Pid}\nFAKE_SGLANG_LOAD_MS=300`);
+  await shot('09-h3-scan');
+  // folder picker
+  await page.getByRole('button', { name: 'Browse…' }).click();
+  await page.getByRole('dialog', { name: 'Choose the H3 model folder' }).waitFor();
+  await page.getByTestId('picker-path').filter({ hasText: h3Root }).waitFor();
+  await page.getByRole('button', { name: 'Use this folder' }).click();
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  await page.getByText('Everything needed was found').waitFor();
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await page.getByText('Settings saved.').last().waitFor();
+  // start the server from the UI, then generate on it
+  await page.getByRole('button', { name: 'Start FL2VA' }).click();
+  await page.getByTestId('server-status').getByText(/ready · FL2VA/).waitFor({ timeout: 15000 }).catch(async (e) => { await shot('99-failure'); throw e; });
+  await shot('10-h3-server-ready');
+  await page.getByRole('button', { name: 'Create' }).click();
+  assert.equal(await page.getByLabel('Run on').inputValue(), 'h3');
+  await page.getByTestId('generate').click();
+  const h3Card = page.locator('[data-testid=job-card][data-status=succeeded]').filter({ hasText: '· h3' });
+  await h3Card.locator('video').waitFor({ timeout: 20000 });
+  const h3Video = await page.evaluate(async () => {
+    const card = [...document.querySelectorAll('[data-testid=job-card]')].find((c) => c.textContent?.includes('· h3') && c.querySelector('video'))!;
+    const r = await fetch((card.querySelector('video') as HTMLVideoElement).src);
+    return { status: r.status, text: await r.text() };
+  });
+  assert.equal(h3Video.status, 200);
+  assert.match(h3Video.text, /^FAKEMP4:fl2va:t2va:\d+$/);
+  const created = readFileSync(h3Log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).find((e) => e.event === 'create');
+  assert.equal(created.body.task, 't2va');
+  assert.deepEqual(created.body.target.short_edge, 768);
+  await shot('11-h3-job-done');
+  step('H3: folder scan finds models + SGLang, folder picker works, server starts from the UI, job runs through /v1/videos');
+
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByTestId('server-status').getByText(/^stopped$/).waitFor();
+  const sglangPid = Number(readFileSync(h3Pid, 'utf8'));
+  await new Promise((r) => setTimeout(r, 300));
+  assert.throws(() => process.kill(sglangPid, 0), 'the model server process is gone after Stop');
+  step('H3: Stop frees the model server process');
+  rmSync(h3Parent, { recursive: true, force: true });
+  await page.getByRole('button', { name: 'Create' }).click();
 
   // --- import an existing prompt ---
   await page.getByRole('button', { name: /Import prompt/ }).click();

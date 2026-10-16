@@ -7,7 +7,7 @@ const host = process.env.HOST ?? '127.0.0.1';
 const dataDir = path.resolve(process.env.H3_DATA_DIR ?? 'data');
 const devOrigin = process.env.H3_DEV_ORIGIN ?? 'http://localhost:5173';
 
-const { app, queue } = createApp({
+const { app, queue, h3Server } = createApp({
   dataDir,
   port,
   extraOrigins: [devOrigin, devOrigin.replace('localhost', '127.0.0.1')],
@@ -25,8 +25,10 @@ const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
 const shutdown = () => {
   server.close();
   queue.cancelAll();
-  void queue.idle().finally(() => process.exit(0));
+  h3Server.killNow();
+  void queue.idle().then(() => h3Server.stop()).finally(() => process.exit(0));
   setTimeout(() => process.exit(0), 6000).unref();
 };
+process.on('exit', () => h3Server.killNow());
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);

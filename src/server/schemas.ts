@@ -55,6 +55,6 @@ export const CreateJobSchema = z.object({
   assets: z.array(AssetRefSchema).max(16),
   modeOverride: mode.optional(),
   params: GenParamsSchema,
-  backend: z.enum(['mock', 'command']).optional(),
+  backend: z.enum(['mock', 'command', 'h3']).optional(),
   force: z.boolean().optional(),
 });

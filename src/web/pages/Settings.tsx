@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { BackendKind, Effort, SettingsView } from '../../shared/api';
+import { useCallback, useEffect, useState } from 'react';
+import type { BackendKind, Effort, H3Settings, SettingsView } from '../../shared/api';
 import { api, messageOf } from '../api';
 import type { Toast } from '../hooks';
+import { H3Panel } from '../components/H3Panel';
 import { Field, Spinner, Toggle } from '../ui';
 
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -21,6 +22,7 @@ export function SettingsPage({ settings, onSaved, push }: { settings: SettingsVi
   const [cwd, setCwd] = useState('');
   const [env, setEnv] = useState('');
   const [timeoutMin, setTimeoutMin] = useState(60);
+  const [h3, setH3] = useState<H3Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -34,22 +36,27 @@ export function SettingsPage({ settings, onSaved, push }: { settings: SettingsVi
     setCwd(settings.generation.command.cwd);
     setEnv(envToText(settings.generation.command.env));
     setTimeoutMin(settings.generation.command.timeoutMin);
+    setH3(settings.generation.h3);
   }, [settings]);
 
-  if (!settings) return <div className="page"><Spinner /></div>;
+  const patchH3 = useCallback((patch: Partial<H3Settings>) => setH3((cur) => (cur ? { ...cur, ...patch } : cur)), []);
 
-  const save = async (extra: { clearApiKey?: boolean } = {}) => {
+  if (!settings || !h3) return <div className="page"><Spinner /></div>;
+
+  const save = async (extra: { clearApiKey?: boolean } = {}): Promise<boolean> => {
     setSaving(true);
     try {
       const saved = await api.saveSettings({
         llm: { model, effort, refusalFallback: fallback, apiKey: apiKey || undefined, ...extra },
-        generation: { backend, command: { program, args: args.split('\n').map((l) => l.trim()).filter(Boolean), cwd, env: textToEnv(env), timeoutMin } },
+        generation: { backend, command: { program, args: args.split('\n').map((l) => l.trim()).filter(Boolean), cwd, env: textToEnv(env), timeoutMin }, h3 },
       });
       setApiKey('');
       onSaved(saved);
       push('ok', 'Settings saved.');
+      return true;
     } catch (e) {
       push('error', messageOf(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -79,11 +86,13 @@ export function SettingsPage({ settings, onSaved, push }: { settings: SettingsVi
         <h3>Video generation</h3>
         <Field label="Backend">
           <select value={backend} onChange={(e) => setBackend(e.target.value as BackendKind)}>
+            <option value="h3">MiniMax H3 — my downloaded model folder</option>
             <option value="mock">Mock — simulates a render, produces no video</option>
-            <option value="command">Local model — run a program per job</option>
+            <option value="command">Custom command — run my own program per job</option>
           </select>
         </Field>
-        <div className={backend === 'command' ? '' : 'dim'}>
+        {backend === 'h3' && <H3Panel value={h3} onChange={patchH3} saveNow={() => save()} push={push} />}
+        {backend === 'command' && <div>
           <Field label="Program" hint="Started directly (no shell). Use a full path, or something on PATH such as python3.">
             <input value={program} placeholder="/home/me/h3/.venv/bin/python" onChange={(e) => setProgram(e.target.value)} />
           </Field>
@@ -97,8 +106,8 @@ export function SettingsPage({ settings, onSaved, push }: { settings: SettingsVi
           <Field label="Extra environment" hint="KEY=value, one per line">
             <textarea rows={3} className="mono" value={env} placeholder={'CUDA_VISIBLE_DEVICES=0'} onChange={(e) => setEnv(e.target.value)} />
           </Field>
-        </div>
-        <details className="contract">
+        </div>}
+        {backend === 'command' && <details className="contract">
           <summary>How the program is called</summary>
           <p>For each job the program runs once with these environment variables:</p>
           <ul>
@@ -108,7 +117,7 @@ export function SettingsPage({ settings, onSaved, push }: { settings: SettingsVi
             <li><code>H3_OUTPUT</code> — write the finished video here (<code>output.mp4</code>; <code>.webm/.mov/.m4v</code> also accepted)</li>
           </ul>
           <p>Print <code>PROGRESS 40 sampling</code> (percent) or <code>{'{"progress":0.4,"message":"sampling"}'}</code> to update the progress bar. Exit code 0 with an output file = success; anything else = failed, and the last log lines are shown on the job.</p>
-        </details>
+        </details>}
       </section>
 
       <div className="actions">

@@ -181,3 +181,39 @@ details[open] > summary { margin-bottom: 6px; }
 .toast { padding: 11px 15px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line-2); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); cursor: pointer; font-size: 13.5px; }
 .toast-error { border-color: rgba(255, 107, 107, 0.6); }
 .toast-ok { border-color: rgba(61, 220, 151, 0.5); }
+
+/* ---- MiniMax H3 panel ---- */
+.h3-panel { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; gap: 8px; align-items: stretch; }
+.row input { flex: 1; min-width: 0; }
+.scan { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.scan-variant { display: flex; flex-direction: column; gap: 6px; }
+.scan-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scan-components { display: flex; flex-wrap: wrap; gap: 6px; }
+.comp { font-size: 12px; padding: 1px 8px; border-radius: 7px; border: 1px solid var(--line-2); font-family: ui-monospace, monospace; }
+.comp-ok { color: var(--ok); border-color: rgba(61, 220, 151, 0.35); }
+.comp-bad { color: var(--danger); border-color: rgba(255, 107, 107, 0.5); }
+.scan-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.note { display: flex; gap: 9px; font-size: 13px; line-height: 1.45; }
+.note-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--info); }
+.note-error .note-dot { background: var(--danger); }
+.note-warn .note-dot { background: var(--warn); }
+.note-error { color: var(--text); }
+.scan-ok { margin: 0; color: var(--ok); font-weight: 650; font-size: 13.5px; }
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 13.5px; }
+.radio input { margin-top: 3px; accent-color: var(--accent); }
+.server-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.server-box .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-start; }
+.server-box .btn { padding: 6px 12px; font-size: 13px; }
+.field-error { color: var(--danger); font-size: 13px; margin: 0; }
+pre.log { max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.picker-path { font-family: ui-monospace, monospace; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); word-break: break-all; }
+.picker-list { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; }
+.picker-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.picker-row.split { cursor: default; }
+.picker-row.split .link-row { flex: 1; }
+.picker-row:hover { background: var(--panel-2); }
+.link-row { background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 0; }
+.radio input[type=radio] { width: auto; flex: none; padding: 0; }
+.radio > span { flex: 1; min-width: 0; }

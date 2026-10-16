@@ -1,8 +1,8 @@
-import type { CommandSettings, Effort, SettingsUpdate, SettingsView, BackendKind } from '../shared/api';
+import type { BackendKind, CommandSettings, Effort, H3Settings, SettingsUpdate, SettingsView } from '../shared/api';
 
 export interface Settings {
   llm: { apiKey: string; model: string; effort: Effort; refusalFallback: boolean };
-  generation: { backend: BackendKind; command: CommandSettings };
+  generation: { backend: BackendKind; command: CommandSettings; h3: H3Settings };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -10,6 +10,21 @@ export const DEFAULT_SETTINGS: Settings = {
   generation: {
     backend: 'mock',
     command: { program: '', args: [], cwd: '', env: {}, timeoutMin: 60 },
+    h3: {
+      modelDir: '',
+      serverMode: 'managed',
+      sglangPath: '',
+      numGpus: 0,
+      port: 30010,
+      extraArgs: [],
+      env: {},
+      externalFl2vaUrl: 'http://127.0.0.1:30010',
+      externalRef2vaUrl: 'http://127.0.0.1:30011',
+      assetTransport: 'file',
+      startupTimeoutMin: 30,
+      idleStopMin: 20,
+      jobTimeoutMin: 90,
+    },
   },
 };
 
@@ -20,8 +35,9 @@ export function mergeSettings(base: Settings, stored: unknown): Settings {
   return {
     llm: { ...base.llm, ...(s.llm ?? {}) },
     generation: {
-      backend: s.generation?.backend === 'command' ? 'command' : 'mock',
+      backend: s.generation?.backend === 'command' || s.generation?.backend === 'h3' ? s.generation.backend : 'mock',
       command: { ...base.generation.command, ...(s.generation?.command ?? {}) },
+      h3: { ...base.generation.h3, ...(s.generation?.h3 ?? {}) },
     },
   };
 }
@@ -64,7 +80,7 @@ export function applyUpdate(current: Settings, update: SettingsUpdate): Settings
   const gen = update.generation;
   if (gen) {
     if (gen.backend !== undefined) {
-      if (gen.backend !== 'mock' && gen.backend !== 'command') throw new Error('Unknown backend.');
+      if (gen.backend !== 'mock' && gen.backend !== 'command' && gen.backend !== 'h3') throw new Error('Unknown backend.');
       next.generation.backend = gen.backend;
     }
     const c = gen.command;
@@ -86,6 +102,48 @@ export function applyUpdate(current: Settings, update: SettingsUpdate): Settings
         next.generation.command.timeoutMin = Math.round(t);
       }
     }
+    if (gen.h3) applyH3(next.generation.h3, gen.h3);
   }
   return next;
+}
+
+const URL_RE = /^https?:\/\/[^\s]+$/i;
+
+function intIn(value: unknown, min: number, max: number, what: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${what} must be between ${min} and ${max}.`);
+  return Math.round(n);
+}
+
+function applyH3(target: H3Settings, u: Partial<H3Settings>): void {
+  if (u.modelDir !== undefined) target.modelDir = String(u.modelDir).trim().slice(0, 1000);
+  if (u.serverMode !== undefined) {
+    if (u.serverMode !== 'managed' && u.serverMode !== 'external') throw new Error('Unknown server mode.');
+    target.serverMode = u.serverMode;
+  }
+  if (u.sglangPath !== undefined) target.sglangPath = String(u.sglangPath).trim().slice(0, 1000);
+  if (u.numGpus !== undefined) target.numGpus = intIn(u.numGpus, 0, 64, 'GPU count');
+  if (u.port !== undefined) target.port = intIn(u.port, 1024, 65534, 'Port');
+  if (u.extraArgs !== undefined) {
+    if (!Array.isArray(u.extraArgs) || u.extraArgs.some((a) => typeof a !== 'string')) throw new Error('Extra arguments must be a list of strings.');
+    target.extraArgs = u.extraArgs;
+  }
+  if (u.env !== undefined) {
+    const entries = Object.entries(u.env);
+    if (entries.some(([k, v]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) || typeof v !== 'string')) throw new Error('Environment variable names/values are invalid.');
+    target.env = Object.fromEntries(entries);
+  }
+  for (const key of ['externalFl2vaUrl', 'externalRef2vaUrl'] as const) {
+    if (u[key] === undefined) continue;
+    const url = String(u[key]).trim().replace(/\/+$/, '');
+    if (url && !URL_RE.test(url)) throw new Error('Server URLs must start with http:// or https://.');
+    target[key] = url;
+  }
+  if (u.assetTransport !== undefined) {
+    if (u.assetTransport !== 'file' && u.assetTransport !== 'data') throw new Error('Unknown asset transport.');
+    target.assetTransport = u.assetTransport;
+  }
+  if (u.startupTimeoutMin !== undefined) target.startupTimeoutMin = intIn(u.startupTimeoutMin, 1, 720, 'Startup timeout');
+  if (u.idleStopMin !== undefined) target.idleStopMin = intIn(u.idleStopMin, 0, 1440, 'Idle stop');
+  if (u.jobTimeoutMin !== undefined) target.jobTimeoutMin = intIn(u.jobTimeoutMin, 1, 1440, 'Job timeout');
 }

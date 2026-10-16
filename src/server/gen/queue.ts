@@ -120,6 +120,11 @@ export class JobQueue {
     for (const job of this.jobs.values()) if (job.status === 'queued' || job.status === 'running') this.cancel(job.id);
   }
 
+  /** True while a job is running or waiting. */
+  busy(): boolean {
+    return Boolean(this.current) || [...this.jobs.values()].some((j) => j.status === 'queued');
+  }
+
   /** Resolves once nothing is queued or running — used by tests and graceful shutdown. */
   async idle(): Promise<void> {
     while (this.current || [...this.jobs.values()].some((j) => j.status === 'queued')) {
@@ -160,6 +165,7 @@ export class JobQueue {
         dir,
         inputs,
         command: this.getSettings().generation.command,
+        h3: this.getSettings().generation.h3,
         signal: abort.signal,
         progress: (fraction, message) => {
           job.progress = Math.max(0, Math.min(1, fraction));

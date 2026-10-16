@@ -1,4 +1,4 @@
-import type { AssetRecord, CreateJobRequest, EnhanceRequest, EnhanceResponse, JobRecord, SettingsUpdate, SettingsView } from '../shared/api';
+import type { AssetRecord, CreateJobRequest, DirListing, EnhanceRequest, EnhanceResponse, H3Scan, H3ServerStatus, H3Variant, JobRecord, SettingsUpdate, SettingsView } from '../shared/api';
 import type { LintIssue } from '../shared/types';
 
 export class ApiFailure extends Error {
@@ -35,6 +35,11 @@ export const api = {
   jobs: () => call<JobRecord[]>('/api/jobs'),
   cancelJob: (id: string) => call<{ ok: true }>(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   deleteJob: (id: string) => call<{ ok: true }>(`/api/jobs/${id}`, { method: 'DELETE' }),
+  scanH3: (path: string) => call<H3Scan>('/api/h3/scan', send('POST', { path })),
+  h3Status: () => call<H3ServerStatus>('/api/h3/status'),
+  h3Start: (variant: H3Variant) => call<H3ServerStatus>('/api/h3/start', send('POST', { variant })),
+  h3Stop: () => call<H3ServerStatus>('/api/h3/stop', send('POST', {})),
+  dirs: (path: string) => call<DirListing>(`/api/fs/dirs?path=${encodeURIComponent(path)}`),
 
   /** Multipart upload with progress (fetch can't report upload progress). */
   upload(file: File, preview: Blob | undefined, onProgress: (fraction: number) => void): Promise<AssetRecord> {

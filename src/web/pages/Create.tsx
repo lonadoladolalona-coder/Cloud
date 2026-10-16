@@ -58,6 +58,10 @@ export function CreatePage({ settings, jobs, push, reuse, onReuseDone, onReuse, 
   const counts = summarizeLint(issues);
   const activeBackend = backend ?? settings?.generation.backend ?? 'mock';
 
+  // Saving a different default backend in Settings should win over an earlier per-session choice.
+  const savedBackend = settings?.generation.backend;
+  useEffect(() => setBackend(null), [savedBackend]);
+
   // Forget attachments whose files are gone from the server (deleted data dir, other machine…).
   useEffect(() => {
     api.assets().then((list) => {
@@ -179,6 +183,7 @@ export function CreatePage({ settings, jobs, push, reuse, onReuseDone, onReuse, 
   const copy = () => navigator.clipboard.writeText(text).then(() => push('ok', 'Copied.'), () => push('error', 'Clipboard is not available.'));
   const preset = PRESETS.find((p) => p.id === draft.presetId);
   const commandMissing = activeBackend === 'command' && !settings?.generation.command.program;
+  const h3Missing = activeBackend === 'h3' && settings?.generation.h3.serverMode === 'managed' && !settings.generation.h3.modelDir;
 
   return (
     <div className="create">
@@ -297,11 +302,14 @@ export function CreatePage({ settings, jobs, push, reuse, onReuseDone, onReuse, 
               <Field label="Run on">
                 <select value={activeBackend} onChange={(e) => setBackend(e.target.value as BackendKind)}>
                   <option value="mock">Mock (no model)</option>
-                  <option value="command">Local model (command)</option>
+                  <option value="h3">MiniMax H3 (local folder)</option>
+                  <option value="command">Custom command</option>
                 </select>
               </Field>
               {commandMissing && <span className="hint">No program set. <button className="link" onClick={openSettings}>Open Settings</button></span>}
-              <button className="btn primary big" onClick={() => generate(false)} disabled={busy !== null || commandMissing} data-testid="generate">
+              {h3Missing && <span className="hint">No model folder set. <button className="link" onClick={openSettings}>Open Settings</button></span>}
+              {activeBackend === 'h3' && !h3Missing && <span className="hint">768p native · 4–15 s · the first job loads the model (a few minutes).</span>}
+              <button className="btn primary big" onClick={() => generate(false)} disabled={busy !== null || commandMissing || h3Missing} data-testid="generate">
                 {busy === 'generate' ? <Spinner /> : <Icon name="play" />} Generate
               </button>
             </div>

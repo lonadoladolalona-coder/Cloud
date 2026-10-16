@@ -1,5 +1,5 @@
 import type { AssetKind, AssetRole } from '../../shared/types';
-import type { CommandSettings, JobRecord } from '../../shared/api';
+import type { CommandSettings, H3Settings, JobRecord } from '../../shared/api';
 
 /** One reference file, copied into the job folder under its prompt label (e.g. inputs/Picture_1.png). */
 export interface JobInput {
@@ -19,6 +19,7 @@ export interface BackendContext {
   dir: string;
   inputs: JobInput[];
   command: CommandSettings;
+  h3: H3Settings;
   signal: AbortSignal;
   progress(fraction: number, message?: string): void;
   log(line: string): void;
