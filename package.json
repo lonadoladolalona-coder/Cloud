@@ -12,7 +12,9 @@
     "start": "tsx src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "tsx e2e/run.ts"
+    "e2e": "tsx e2e/run.ts",
+    "build:demo": "vite build --config vite.demo.config.ts",
+    "pack:demo": "node scripts/pack-demo.mjs"
   },
   "engines": {
     "node": ">=20"

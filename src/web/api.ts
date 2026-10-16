@@ -1,11 +1,9 @@
 import type { AssetRecord, CreateJobRequest, DirListing, EnhanceRequest, EnhanceResponse, H3Scan, H3ServerStatus, H3Variant, JobRecord, SettingsUpdate, SettingsView } from '../shared/api';
 import type { LintIssue } from '../shared/types';
 
-export class ApiFailure extends Error {
-  constructor(message: string, readonly status: number, readonly details?: unknown) {
-    super(message);
-  }
-}
+import { ApiFailure } from './errors';
+
+export { ApiFailure };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -25,7 +23,7 @@ const send = (method: string, body?: unknown): RequestInit => ({
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 
-export const api = {
+const realApi = {
   settings: () => call<SettingsView>('/api/settings'),
   saveSettings: (u: SettingsUpdate) => call<SettingsView>('/api/settings', send('PUT', u)),
   assets: () => call<AssetRecord[]>('/api/assets'),
@@ -65,6 +63,9 @@ export const api = {
     });
   },
 };
+
+/** The static demo build installs a simulated backend here before this module loads; everywhere else it is the real server. */
+export const api: typeof realApi = (globalThis as { __H3_DEMO__?: typeof realApi }).__H3_DEMO__ ?? realApi;
 
 export const lintFromError = (e: unknown): LintIssue[] => (e instanceof ApiFailure && Array.isArray(e.details) ? (e.details as LintIssue[]) : []);
 export const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));

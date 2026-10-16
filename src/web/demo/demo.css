@@ -1,0 +1,10 @@
+/* Demo-only layer: the banner, plus the gutters and colour scheme a hosted page needs. */
+:root { color-scheme: dark; }
+.demo-banner { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); background: var(--panel-2); border-bottom: 1px solid var(--line-2); font-size: 13px; line-height: 1.5; color: var(--text); }
+.demo-banner strong { color: var(--accent); }
+.demo-try { color: var(--muted); }
+.demo-close { flex: none; background: transparent; color: var(--muted); border: 1px solid var(--line-2); border-radius: 8px; padding: 3px 10px; font: inherit; cursor: pointer; }
+.demo-close:hover { color: var(--text); border-color: var(--muted); }
+.topbar { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); top: env(safe-area-inset-top, 0px); }
+main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+@media (max-width: 640px) { .topbar { gap: 12px; flex-wrap: wrap; } }

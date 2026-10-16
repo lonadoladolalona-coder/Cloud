@@ -122,6 +122,8 @@ Privacy notes:
 
 Scripts: `npm test`, `npm run typecheck`, `npm run e2e` (needs `npm run build` first and a Chromium that Playwright can find).
 
+**Static demo:** `npm run build:demo && npm run pack:demo` builds the same interface with a simulated backend (template writer instead of Claude, a pretend model folder and server, placeholder clips) into one self-contained HTML file, `dist/demo/studio-h3-demo.html`, that runs without any server.
+
 ## Refusal fallback
 
 By default, if Claude declines a request, it is retried server-side on Anthropic's recommended fallback model (beta `server-side-fallback-2026-07-01`). Turn this off in Settings if you want refusals returned as errors.

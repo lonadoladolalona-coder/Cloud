@@ -101,7 +101,10 @@ export function H3Panel({ value, onChange, saveNow, push }: Props) {
           <ul className="scan-notes">
             {scan.notes.map((n, i) => <li key={i} className={`note note-${n.level}`}><span className="note-dot" aria-hidden="true" />{n.text}</li>)}
           </ul>
-          {scan.ready && <p className="scan-ok" role="status">✓ Everything needed was found. Save, then press Generate.</p>}
+          {scan.ready && scan.variants.filter((v) => v.present).every((v) => v.complete) && <p className="scan-ok" role="status">✓ Everything needed was found. Save, then press Generate.</p>}
+          {scan.ready && scan.variants.some((v) => v.present && !v.complete) && (
+            <p className="scan-ok" role="status">✓ {scan.variants.filter((v) => v.complete).map((v) => v.folder).join(' and ')} can be used now. Fix the red items above to enable the rest.</p>
+          )}
         </div>
       )}
 
