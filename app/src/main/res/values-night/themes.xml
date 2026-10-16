@@ -1,5 +1,0 @@
-<resources>
-    <style name="Theme.AjmAdmin" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
-    </style>
-</resources>
